@@ -91,6 +91,8 @@ int main(struct multiboot *mboot_ptr)
     kheap_init();
     serial_puts("MALLOC_OK\n");
 
+    tty_init();
+
     serial_puts("INITRD\n");
     fs_root = initialise_initrd(initrd_location);
     // В main.c после fs_root = initialise_initrd(initrd_location);

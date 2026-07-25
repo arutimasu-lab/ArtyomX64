@@ -12,6 +12,7 @@
 #include "../lib/common.h"
 #include "../lib/axipc.h"
 #include "../dev/console.h"
+#include "../dev/tty.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -220,11 +221,11 @@ int exec(const char* path) {
     for (int i = 0; i < 16384; i++) {
         files[i] = NULL;
     }
-    current_fd = 2; // Сбрасываем счетчик выделяемых FD
+    current_fd = 0; // Сбрасываем счетчик выделяемых FD
 
     // 2. Открываем нужные узлы ФС ВНУТРИ ЯДРА
     // Мы используем finddir_fs напрямую, минуя пользовательский open()
-    fs_node_t *stdin_node = finddir_fs(fs_root, (char*)"pts"); // Или ваш pts узел
+    fs_node_t *stdin_node = active_master_tty ? &active_master_tty->node : finddir_fs(fs_root, (char*)"pts");
     fs_node_t *stdout_node = stdin_node; // Обычно они совпадают для TTY
 
     if (stdin_node) {

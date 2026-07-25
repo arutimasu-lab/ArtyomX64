@@ -550,6 +550,7 @@ static int surf_alloc(const char *title, int w, int h, ax_app_kind kind)
         }
         s->title[k] = 0;
         s->anim = 0;
+        s->bound_tty = tty_create(s->title);
         
         serial_puts_ax("SURF_ALLOC_OK id=");
         char buf[8];
@@ -1411,6 +1412,7 @@ static void process_input(void)
                     ax_event ev = {0}; ev.type = AX_EV_CLOSE;
                     surf_push_event(w, ev);
                     w->used = false;
+                    if (w->bound_tty) { tty_destroy(w->bound_tty); w->bound_tty = 0; }
                     if (w->canvas) { free(w->canvas); w->canvas = 0; }
                     // Если это было активное окно, сбрасываем active_surface
                     if (active_surface == w->id) {
@@ -1520,8 +1522,7 @@ if (k && k != prev_key_char) {
                 }
 
                 // Запись символа в буфер драйвера PTY
-                //pty_buffer_write(&tty->buffer, ascii);
-                tty->has_data = true;
+                tty_master_feed(tty, ascii);
             }
         }
     }
