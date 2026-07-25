@@ -467,6 +467,7 @@ static void surf_focus(ax_surface_win *w)
     w->focused = true;
     w->z = z_counter++;
     active_surface = w->id;
+    active_master_tty = w->bound_tty;
 }
 
 static void surf_push_event(ax_surface_win *w, ax_event ev)
@@ -477,25 +478,10 @@ static void surf_push_event(ax_surface_win *w, ax_event ev)
     }
     
     int next = (w->ev_head + 1) % 16;
-    if (next == w->ev_tail) {
-        serial_puts_ax("ERROR: event queue full for ");
-        serial_puts_ax(w->title);
-        serial_putc_ax('\n');
-        return;
-    }
-    
+    if (next == w->ev_tail) return;
+
     w->ev_queue[w->ev_head] = ev;
     w->ev_head = next;
-    
-    serial_puts_ax("PUSH_EVENT: type=");
-    debug_putnum(ev.type);
-    serial_puts_ax(" to ");
-    serial_puts_ax(w->title);
-    serial_puts_ax(" head=");
-    debug_putnum(w->ev_head);
-    serial_puts_ax(" tail=");
-    debug_putnum(w->ev_tail);
-    serial_putc_ax('\n');
 }
 //extern void print_hex(uint64_t val);
 static int surf_alloc(const char *title, int w, int h, ax_app_kind kind)
@@ -616,53 +602,22 @@ int64_t ax_syscall_surface(const char *title, int w, int h)
 
 int ax_syscall_poll(uint32_t canvas_ptr, ax_event *out)
 {
-    static int poll_count = 0;
-    poll_count++;
-    
-    if (poll_count % 100 == 0) {
-        serial_puts_ax("POLL: count=");
-        debug_putnum(poll_count);
-        serial_puts_ax(" canvas=0x");
-        //print_hex(canvas_ptr);
-        serial_putc_ax('\n');
-    }
-    
     for (int i = 0; i < AX_MAX_WINDOWS; i++) {
         ax_surface_win *s = &surfaces[i];
         if (!s->used) continue;
-        
-        uint32_t s_canvas = (uint32_t)(uintptr_t)s->canvas;
-        if (s_canvas == canvas_ptr) {
-            if (poll_count % 100 == 0) {
-                serial_puts_ax("POLL: found window ");
-                serial_puts_ax(s->title);
-                serial_puts_ax(" head=");
-                debug_putnum(s->ev_head);
-                serial_puts_ax(" tail=");
-                debug_putnum(s->ev_tail);
-                serial_putc_ax('\n');
-            }
-            
+
+        if ((uint32_t)(uintptr_t)s->canvas == canvas_ptr) {
             if (s->ev_head != s->ev_tail) {
                 *out = s->ev_queue[s->ev_tail];
                 s->ev_tail = (s->ev_tail + 1) % 16;
-                
-                if (poll_count % 100 == 0) {
-                    serial_puts_ax("POLL: event type=");
-                    debug_putnum(out->type);
-                    serial_putc_ax('\n');
-                }
                 return 1;
             }
-            
+
             out->type = AX_EV_NONE;
             return 0;
         }
     }
-    
-    if (poll_count % 100 == 0) {
-        serial_puts_ax("POLL: canvas not found\n");
-    }
+
     out->type = AX_EV_NONE;
     return -1;
 }
@@ -1052,6 +1007,10 @@ static void menu_click(int mx, int my)
                     surf_push_event(w, ev);
                     
                     // Освобождаем ресурсы
+                    if (w->bound_tty) {
+                        tty_destroy(w->bound_tty);
+                        w->bound_tty = NULL;
+                    }
                     if (w->canvas) {
                         free(w->canvas);
                         w->canvas = NULL;
@@ -1087,6 +1046,10 @@ static void menu_click(int mx, int my)
                     ax_event ev = {0};
                     ev.type = AX_EV_CLOSE;
                     surf_push_event(&surfaces[i], ev);
+                    if (surfaces[i].bound_tty) {
+                        tty_destroy(surfaces[i].bound_tty);
+                        surfaces[i].bound_tty = NULL;
+                    }
                     if (surfaces[i].canvas) {
                         free(surfaces[i].canvas);
                         surfaces[i].canvas = NULL;
@@ -1520,6 +1483,11 @@ if (k && k != prev_key_char) {
                 if ((tty->termios_c_lflag & ISIG) && ascii == 0x03) {
                     serial_puts_ax("^C\n");
                 }
+
+                ax_event ev = {0};
+                ev.type = AX_EV_KEY;
+                ev.key = (uint32_t)(unsigned char)ascii;
+                surf_push_event(w, ev);
 
                 // Запись символа в буфер драйвера PTY
                 tty_master_feed(tty, ascii);

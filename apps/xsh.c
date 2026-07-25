@@ -152,9 +152,8 @@ void _start(void)
     g_canvas = canvas;
     push_line("XSH 0.1 - type 'help'");
     bool alive = true;
+    bool dirty = true;
     while (alive) {
-        render();
-        ax_commit(canvas);
         ax_event ev;
         while (ax_poll(canvas, &ev) > 0) {
             if (ev.type == AX_EV_CLOSE) return;
@@ -165,12 +164,19 @@ void _start(void)
                 push_prefixed("$ ", input);
                 alive = run_cmd(input);
                 input_len = 0; input[0] = 0;
+                dirty = true;
             } else if (k == '\b' || k == 127) {
-                if (input_len > 0) input[--input_len] = 0;
+                if (input_len > 0) { input[--input_len] = 0; dirty = true; }
             } else if (k >= 32 && k <= 126 && input_len < INPUT_LEN - 1) {
                 input[input_len++] = k;
                 input[input_len] = 0;
+                dirty = true;
             }
+        }
+        if (dirty) {
+            render();
+            ax_commit(canvas);
+            dirty = false;
         }
         yield();
     }
