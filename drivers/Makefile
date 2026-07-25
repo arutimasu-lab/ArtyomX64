@@ -6,14 +6,14 @@ include ../include.mk
 .POSIX:
 .PHONY: clean 
 
-all: mon.o kb.o vga.o mouse.o tm.o  fb.o fnt.o pci.o uhm.o
+all: mon.o kb.o vga.o mouse.o tm.o  fb.o fnt.o pci.o #uhm.o
 #video.o
 #vesafb.o
 
 pci.o: pci.c
 	$(CC) -c $(CFLAGS) -c '$<' -o '$@'
-uhm.o: usb_hid_mouse.c
-	$(CC) -c $(CFLAGS) -c '$<' -o '$@'
+#uhm.o: usb_hid_mouse.c
+#	$(CC) -c $(CFLAGS) -c '$<' -o '$@'
 
 mon.o: monitor.c
 	$(CC) -c $(CFLAGS) -c '$<' -o '$@'

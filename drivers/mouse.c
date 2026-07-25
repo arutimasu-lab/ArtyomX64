@@ -103,7 +103,7 @@ void handle_mouse(void)
     /* USB-мышь (если найдена и настроена в usb_init()) опрашивается всегда,
        независимо от того, есть ли PS/2-мышь — обе пишут в одни и те же
        mouse_dx/mouse_dy/mouse_buttons. */
-    usb_hid_mouse_poll();
+    //usb_hid_mouse_poll();
 
     if (!mouse_present && mouse_dx == 0 && mouse_dy == 0) return;
 
