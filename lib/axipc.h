@@ -8,6 +8,7 @@
 #define AX_SYS_COMMIT    162
 #define AX_SYS_TIME      163
 #define AX_SYS_SCREEN    164
+#define AX_SYS_TTY_READ  165
 
 #define AX_EV_NONE   0
 #define AX_EV_KEY    1

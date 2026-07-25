@@ -17,7 +17,7 @@ all:
 
 main.iso: limine-iso
 
-main.elf: kasm.o boot/limine_boot.o lib/com.o lib/sc.o lib/libc.o lib/gfxlib.o drivers/fb.o drivers/fnt.o drivers/mon.o drivers/tm.o drivers/kb.o drivers/vga.o drivers/mouse.o drivers/pci.o fs/fs.o fs/ird.o fs/ldr.o fs/tsk.o fs/switch.o mm/kheap.o mm/pmm.o kernel/kern.o kernel/dt.o kernel/gdt.o kernel/isr.o kernel/int.o kernel/ksh.o kernel/vgafnt.o kernel/thunk.o kernel/axsh.o kernel/compat.o kernel/compat_asm.o drivers/usb/usb_core.o drivers/usb/uhci.o drivers/usb/ehci.o drivers/uhm.o
+main.elf: kasm.o boot/limine_boot.o lib/com.o lib/sc.o lib/libc.o lib/gfxlib.o drivers/fb.o drivers/fnt.o drivers/mon.o drivers/tm.o drivers/kb.o drivers/vga.o drivers/mouse.o drivers/pci.o fs/fs.o fs/ird.o fs/ldr.o fs/tsk.o fs/switch.o mm/kheap.o mm/pmm.o dev/tty.o kernel/kern.o kernel/dt.o kernel/gdt.o kernel/isr.o kernel/int.o kernel/ksh.o kernel/vgafnt.o kernel/thunk.o kernel/axsh.o kernel/compat.o kernel/compat_asm.o drivers/usb/usb_core.o drivers/usb/uhci.o drivers/usb/ehci.o drivers/uhm.o
 	#drivers/gpu/ixg_driver.o drivers/gpu/ixg_shader_vm.o drivers/gpu/ixg_isa.o drivers/gpu/ixg_isa_encode.o drivers/gpu/ixg_sass.o drivers/gpu/ixg_sass_encode.o drivers/gpu/ixg_mutants.o drivers/gpu/ixg_compute.o drivers/gpu/ixg_backend_amd.o drivers/gpu/ixg_backend_intel.o drivers/gpu/ixg_backend_nvidia.o drivers/gpu/ixg_pman.o
 	ld -m elf_x86_64 -nostdlib -T link.ld $^ -o '$@'
 

@@ -12,6 +12,7 @@
 #include "../lib/common.h"
 #include "../lib/axipc.h"
 #include "../dev/console.h"
+#include "../dev/tty.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -220,11 +221,11 @@ int exec(const char* path) {
     for (int i = 0; i < 16384; i++) {
         files[i] = NULL;
     }
-    current_fd = 2; // Сбрасываем счетчик выделяемых FD
+    current_fd = 0; // Сбрасываем счетчик выделяемых FD
 
     // 2. Открываем нужные узлы ФС ВНУТРИ ЯДРА
     // Мы используем finddir_fs напрямую, минуя пользовательский open()
-    fs_node_t *stdin_node = finddir_fs(fs_root, (char*)"pts"); // Или ваш pts узел
+    fs_node_t *stdin_node = active_master_tty ? &active_master_tty->node : finddir_fs(fs_root, (char*)"pts");
     fs_node_t *stdout_node = stdin_node; // Обычно они совпадают для TTY
 
     if (stdin_node) {
@@ -261,6 +262,18 @@ int exec(const char* path) {
     return pid;
 }
 int ipc_call(int endpoint, void* msg) { return -1; }
+
+static int ax_syscall_tty_read(char *buf, int nbytes)
+{
+    if (!active_master_tty || !buf || nbytes <= 0) return 0;
+
+    int n = 0;
+    char ch;
+    while (n < nbytes && pty_buffer_read(&active_master_tty->output, &ch)) {
+        buf[n++] = ch;
+    }
+    return n;
+}
 
 void syscall_handler(registers_t *regs) {
     /* debug_puts("SYSCALL_ENTER\n");
@@ -326,6 +339,9 @@ void syscall_handler(registers_t *regs) {
         case 164: // AX_SYS_SCREEN
             debug_puts("SYS_SCREEN\n");
             regs->rax = ax_syscall_screen((void*)regs->rdi);
+            break;
+        case 165: // AX_SYS_TTY_READ
+            regs->rax = ax_syscall_tty_read((char*)regs->rdi, regs->rsi);
             break;
         case 170: // compat_exec
             //regs->rax = compat_exec((const char*)regs->rdi);
