@@ -1,21 +1,22 @@
 #include "compat.h"
+#include "linux_sys.h"
 #include "macho.h"
 #include "../fs/elf.h"
 #include "../fs/fs.h"
 #include "../fs/initrd.h"
-//#include "../mm/malloc.h"
-#include "../mm/kheap.h"
-#include "../mm/pmm.h"
+#include "../mm/malloc.h"
 #include "../drivers/monitor.h"
 #include "../lib/common.h"
 #include "../lib/ipc.h"
 #include "../kernel/isr.h"
 #include <stddef.h>
-#define malloc kmalloc
-#define free kfree
+
 extern void *image_load(char *elf_start, unsigned int size);
 extern int call_elf32_thunk(unsigned int entry, unsigned int arg1, unsigned int arg2);
 extern void yield(void);
+extern void linux_syscall_dispatch(uint64_t rax, uint64_t rdi, uint64_t rsi, uint64_t rdx,
+                                   uint64_t r10, uint64_t r8, uint64_t r9,
+                                   uint64_t *out_rax);
 
 typedef struct file {
     fs_node_t *node;
@@ -257,70 +258,7 @@ void linux_syscall_handler(u64int rax, u64int rdi, u64int rsi, u64int rdx,
                            u64int r10, u64int r8, u64int r9,
                            u64int *out_rax)
 {
-    (void)r10; (void)r8; (void)r9;
-    u64int ret = (u64int)-1;
-
-    switch (rax) {
-        case 0:
-            ret = (u64int)sys_read_compat((int)rdi, (char*)rsi, (int)rdx);
-            break;
-        case 1:
-            ret = (u64int)sys_write_compat((int)rdi, (const char*)rsi, (int)rdx);
-            break;
-        case 2:
-            ret = (u64int)sys_open_compat((const char*)rdi, (int)rsi, (int)rdx);
-            break;
-        case 3:
-            ret = (u64int)sys_close_compat((int)rdi);
-            break;
-        case 9:
-            ret = (u64int)(uintptr_t)sys_mmap_compat((void*)rdi, rsi, (int)rdx, (int)r10, (int)r8, r9);
-            break;
-        case 11:
-            ret = (u64int)(uintptr_t)sys_munmap_compat((void*)rdi, rsi);
-            break;
-        case 12:
-            ret = (u64int)(uintptr_t)sys_brk_compat((void*)rdi);
-            break;
-        case 39:
-            ret = 0;
-            break;
-        case 60:
-            monitor_write("\n[Linux] process exited: ");
-            monitor_write_dec((int)rdi);
-            monitor_write("\n");
-            for (;;) yield();
-            break;
-        case 231:
-            monitor_write("\n[Linux] exit_group: ");
-            monitor_write_dec((int)rdi);
-            monitor_write("\n");
-            for (;;) yield();
-            break;
-        case 158:
-        case 218:
-            ret = 0;
-            break;
-        case 17:
-        case 35:
-        case 78:
-        case 79:
-        case 80:
-        case 81:
-        case 82:
-        case 102:
-        case 202:
-            ret = 0;
-            break;
-        default:
-            monitor_write("\n[Linux] unhandled syscall: ");
-            monitor_write_dec((int)rax);
-            monitor_write("\n");
-            ret = (u64int)-38;
-            break;
-    }
-
-    *out_rax = ret;
+    linux_syscall_dispatch(rax, rdi, rsi, rdx, r10, r8, r9, out_rax);
 }
 
 void darwin_syscall_handler(u64int rax, u64int rdi, u64int rsi, u64int rdx,

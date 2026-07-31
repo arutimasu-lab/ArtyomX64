@@ -2,29 +2,24 @@
 #include <stddef.h>
 #include "../drivers/monitor.h"
 #include "../drivers/keyboard.h"
-#include "../drivers/usb/usb.h"
 #include "descriptor_tables.h"
 #include "../boot/multiboot.h"
 #include "../fs/fs.h"
 #include "../fs/initrd.h"
 #include "../fs/task.h"
-//#include "../fs/file.h"
 #include "../lib/syscalls.h"
 #include "../drivers/mouse.h"
-//#include "../mm/malloc.h"
-#include "../mm/kheap.h"
+#include "../drivers/timer.h"
+#include "../drivers/usb.h"
+#include "../mm/malloc.h"
 #include "../mm/pmm.h"
+#include "../mm/vmm.h"
 #include "compat.h"
-#include "../dev/console.h"  // Добавьте в начале
-#include "../dev/tty.h"
-typedef struct file {
-    fs_node_t *node;
-    u32int pos;
-    u32int flags;
-} file_t;
-
-extern file_t *files[];
-extern int current_fd;
+#include "linux_sys.h"
+#include "ksock.h"
+#include "kpty.h"
+#include "../drivers/net/ixn_net.h"
+#include "../drivers/net/ixn_socket_api.h"
 
 static void serial_putc(char c)
 {
@@ -78,47 +73,44 @@ int main(struct multiboot *mboot_ptr)
     init_descriptor_tables();
     serial_puts("DT_OK\n");
 
-    usb_init();
-     initialise_syscalls();
-
     ASSERT(mboot_ptr->mods_count > 0);
     serial_puts("MODS_OK\n");
     u64int initrd_location = *((u64int*)(uintptr_t)mboot_ptr->mods_addr);
 
     serial_puts("MALLOC\n");
-    //malloc_init((void*)_heap_start, (size_t)(_heap_end - _heap_start));
-    pmm_init();
-    kheap_init();
+    malloc_init((void*)_heap_start, (size_t)(_heap_end - _heap_start));
     serial_puts("MALLOC_OK\n");
+
+    serial_puts("PMM\n");
+    pmm_init(0x01000000ull, 0x10000000ull);
+    serial_puts("PMM_OK\n");
+
+    serial_puts("VMM\n");
+    vmm_init(0xffff800000000000ull);
+    serial_puts("VMM_OK\n");
+
+    serial_puts("KSOCK\n");
+    ksock_init();
+    serial_puts("KSOCK_OK\n");
+
+    serial_puts("KPTY\n");
+    kpty_init();
+    serial_puts("KPTY_OK\n");
+
+    serial_puts("NET\n");
+    /*ixn_net_init();
+    ixn_socket_api_init();
+    ixn_net_auto_configure();*/
+    serial_puts("NET_OK\n");
+
+    serial_puts("LINUX_SYS\n");
+    linux_sys_init();
+    serial_puts("LINUX_SYS_OK\n");
 
     serial_puts("INITRD\n");
     fs_root = initialise_initrd(initrd_location);
-    // В main.c после fs_root = initialise_initrd(initrd_location);
-serial_puts("INITRD_OK\n");
+    serial_puts("INITRD_OK\n");
 
-// main.c - после fs_root = initialise_initrd(initrd_location);
-
-/*fs_node_t *console = finddir_fs(fs_root, "console");
-if (console == NULL) {
-    serial_puts("ERROR: console not found!\n");
-} else {
-    // fd 0,1,2 - все указывают на console (slave)
-    files[0] = kmalloc(sizeof(file_t));
-    files[0]->node = console;
-    files[0]->pos = 0;
-    files[0]->flags = 0;
-
-    files[1] = kmalloc(sizeof(file_t));
-    files[1]->node = console;
-    files[1]->pos = 0;
-    files[1]->flags = 0;
-
-    files[2] = kmalloc(sizeof(file_t));
-    files[2]->node = console;
-    files[2]->pos = 0;
-    files[2]->flags = 0;
-}*/
-//tty_install();
     monitor_write("List the contents of ramdisk:\n\n");
     serial_puts("LIST\n");
     int i = 0;
@@ -149,9 +141,14 @@ if (console == NULL) {
         i++;
     }
     serial_puts("LIST_DONE\n");
-//#include "../lib/unistd.h"
-    //exec("hi");
 
+    serial_puts("TIMER\n");
+    init_timer(100u);
+    serial_puts("TIMER_OK\n");
+
+    serial_puts("USB\n");
+    usb_init();
+    serial_puts("USB_OK\n");
 
     serial_puts("PIC\n");
     outb(0x21, 0xF8);
@@ -173,7 +170,6 @@ if (console == NULL) {
     serial_puts("TASK_OK\n");
 
     serial_puts("AXSHELL\n");
-
     axshell_main();
 
     return 0;
