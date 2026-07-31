@@ -69,11 +69,4 @@ void close_fs(fs_node_t *node);
 struct dirent *readdir_fs(fs_node_t *node, u32int index);
 fs_node_t *finddir_fs(fs_node_t *node, char *name);
 
-// В fs.h добавьте объявление
-
-// Внешняя ссылка на корень devfs
-extern fs_node_t *devfs_root;
-
-// Функция для получения устройства по пути
-fs_node_t *devfs_get_node(const char *path);
 #endif

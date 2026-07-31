@@ -7,7 +7,7 @@ include ../include.mk
 .POSIX:
 .PHONY: clean 
 
-all: com.o sc.o libc.o gfxlib.o
+all: com.o sc.o libc.o gfxlib.o axgl.o
 
 
 com.o: common.c
@@ -21,7 +21,9 @@ libc.o: libc.c
 	$(CC) -c $(CFLAGS) -c '$<' -o '$@'
 gfxlib.o: gfxlib.c
 	$(CC) -c $(CFLAGS) -c '$<' -o '$@'
-	#-m32 -std=gnu99 -ffreestanding -fno-builtin -Os -o '$@' -Wall -Wextra '$<'
+
+axgl.o: axgl.c axgl.h
+	$(CC) -c $(CFLAGS) -msse2 -c '$<' -o '$@'
 
 	
 clean:

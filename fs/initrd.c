@@ -2,13 +2,8 @@
 //             Written for JamesM's kernel development tutorials.
 
 #include "initrd.h"
-//#include "../mm/malloc.h"
-#include "../mm/kheap.h"
-#include "../mm/pmm.h"
+#include "../mm/malloc.h"
 #include "../lib/common.h"
-#include "../dev/console.h"
-#define malloc kmalloc
-#define free kfree
 initrd_header_t *initrd_header;     // The header.
 initrd_file_header_t *file_headers; // The list of file headers.
 fs_node_t *initrd_root;             // Our root directory node.
@@ -53,21 +48,21 @@ static struct dirent *initrd_readdir(fs_node_t *node, u32int index)
 
 static fs_node_t *initrd_finddir(fs_node_t *node, char *name)
 {
-    if (node == initrd_root && !strcmp(name, "dev"))
+    if (node == initrd_root &&
+        !strcmp(name, "dev") )
         return initrd_dev;
-    if (node == initrd_root && !strcmp(name, "initrd"))
+    
+    if (node == initrd_root &&
+        !strcmp(name, "initrd") )
         return initrd_root;
-    /*if ((node == initrd_root || node == initrd_dev) && !strcmp(name, "console"))
-        return &console_node;
-    if ((node == initrd_root || node == initrd_dev) && !strcmp(name, "consolem"))
-        return &consolem_node;   // <-- новое
-*/
+
     int i;
     for (i = 0; i < nroot_nodes; i++)
         if (!strcmp(name, root_nodes[i].name))
             return &root_nodes[i];
     return 0;
 }
+
 fs_node_t *initrd_remove(char *name)
 {
     int i;
@@ -119,37 +114,25 @@ fs_node_t *initialise_initrd(u64int location)
     initrd_dev->finddir = &initrd_finddir;
     initrd_dev->ptr = 0;
     initrd_dev->impl = 0;
-//console_dev_init();
-     root_nodes = (fs_node_t*)malloc(sizeof(fs_node_t) * initrd_header->nfiles);
+
+    root_nodes = (fs_node_t*)malloc(sizeof(fs_node_t) * initrd_header->nfiles);
     nroot_nodes = initrd_header->nfiles;
 
     int i;
     for (i = 0; i < initrd_header->nfiles; i++)
     {
-        // Проверяем, является ли файл "console"
-        /*if (strcmp(file_headers[i].name, "console") == 0) {
-            // Для console используем существующий console_node
-            // Копируем console_node в root_nodes[i]
-            memcpy(&root_nodes[i], &console_node, sizeof(fs_node_t));
-            // Но сохраняем имя из initrd
-            strcpy(root_nodes[i].name, "console");
-            // Убеждаемся, что флаги правильные
-            root_nodes[i].flags = FS_CHARDEVICE;
-        } else {*/
-            // Обычный файл
-            strcpy(root_nodes[i].name, &file_headers[i].name);
-            root_nodes[i].mask = root_nodes[i].uid = root_nodes[i].gid = 0;
-            root_nodes[i].length = file_headers[i].length;
-            root_nodes[i].inode = i;
-            root_nodes[i].flags = FS_FILE;
-            root_nodes[i].read = &initrd_read;
-            root_nodes[i].write = 0;
-            root_nodes[i].readdir = 0;
-            root_nodes[i].finddir = 0;
-            root_nodes[i].open = 0;
-            root_nodes[i].close = 0;
-            root_nodes[i].impl = 0;
-        //}
+        strcpy(root_nodes[i].name, &file_headers[i].name);
+        root_nodes[i].mask = root_nodes[i].uid = root_nodes[i].gid = 0;
+        root_nodes[i].length = file_headers[i].length;
+        root_nodes[i].inode = i;
+        root_nodes[i].flags = FS_FILE;
+        root_nodes[i].read = &initrd_read;
+        root_nodes[i].write = 0;
+        root_nodes[i].readdir = 0;
+        root_nodes[i].finddir = 0;
+        root_nodes[i].open = 0;
+        root_nodes[i].close = 0;
+        root_nodes[i].impl = 0;
     }
-    return initrd_root;   
+    return initrd_root;
 }

@@ -6,17 +6,18 @@ include ../include.mk
 .POSIX:
 .PHONY: clean 
 
-all: pmm.o kheap.o
+all: malloc.o pmm.o vmm.o
 
 
-#malloc.o: malloc.c
-	$(CC) -c $(CFLAGS) -c '$<' -o '$@'
-	#-m32 -std=gnu99 -ffreestanding -fno-builtin -Os -o '$@' -Wall -Wextra '$<'
-pmm.o: pmm.c
-	$(CC) -c $(CFLAGS) -c '$<' -o '$@'
-kheap.o: kheap.c
+malloc.o: malloc.c
 	$(CC) -c $(CFLAGS) -c '$<' -o '$@'
 
+pmm.o: pmm.c pmm.h
+	$(CC) -c $(CFLAGS) -c '$<' -o '$@'
+
+vmm.o: vmm.c vmm.h pmm.h
+	$(CC) -c $(CFLAGS) -c '$<' -o '$@'
+	
 clean:
 	rm -f  *.o 
 

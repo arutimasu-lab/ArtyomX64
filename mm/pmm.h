@@ -1,25 +1,24 @@
 #ifndef PMM_H
 #define PMM_H
 
-#include "../lib/common.h"
+#include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
-#define PMM_PAGE_SIZE 4096ULL
+#define PMM_PAGE_SIZE 4096ull
+#define PMM_REGION_SIZE 0x10000000ull
 
-/* Must be called once, after limine_boot_init() has populated `mbi`
- * (i.e. after the framebuffer/mmap bridging in limine_boot.c has run)
- * and before anything calls pmm_alloc_page()/kmalloc(). */
-void   pmm_init(void);
+void     pmm_init(uint64_t managed_base, uint64_t managed_size);
+uint64_t pmm_alloc_frame(void);
+uint64_t pmm_alloc_frames(uint32_t count);
+void     pmm_free_frame(uint64_t phys);
+void     pmm_free_frames(uint64_t phys, uint32_t count);
 
-u64int pmm_alloc_page(void);
-u64int pmm_alloc_pages(u64int count);   /* returns base phys addr of a
-                                            physically-contiguous run,
-                                            or 0 on failure */
-void   pmm_free_page(u64int phys_addr);
-void   pmm_free_pages(u64int phys_addr, u64int count);
+uint64_t pmm_total_frames(void);
+uint64_t pmm_free_frames_count(void);
+uint64_t pmm_used_frames(void);
 
-u64int pmm_free_page_count(void);
-u64int pmm_used_page_count(void);
-u64int pmm_total_page_count(void);
+bool     pmm_user_oom(void);
+void     pmm_dump_stats(void);
 
 #endif

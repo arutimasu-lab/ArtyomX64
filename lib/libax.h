@@ -3,30 +3,20 @@
 
 #include <stdint.h>
 #include "axipc.h"
+
 static inline uint32_t *ax_surface(const char *title, int w, int h)
 {
-     //outb(0x3F8, 'B'); 
-    volatile int64_t ret;
+    int64_t ret;
     __asm__ volatile("int $0x80"
         : "=a"(ret)
         : "a"(AX_SYS_SURFACE), "D"((long)title), "S"((long)w), "d"((long)h)
         : "memory");
-     //outb(0x3F8, 'C'); 
-   /* // Отладка
-    const char *s = "SURFACE_RET: ";
-    for (int i = 0; s[i]; i++) outb(0x3F8, s[i]);
-    for (int i = 60; i >= 0; i -= 4) {
-        int digit = (ret >> i) & 0xF;
-        outb(0x3F8, "0123456789ABCDEF"[digit]);
-    }
-    outb(0x3F8, '\n');
-    */
     return (uint32_t*)(uintptr_t)ret;
 }
 
 static inline int ax_poll(uint32_t *canvas, ax_event *ev)
 {
-    volatile int ret;
+    int ret;
     __asm__ volatile("int $0x80"
         : "=a"(ret)
         : "a"(AX_SYS_POLL), "D"((long)(uintptr_t)canvas), "S"((long)ev)
@@ -36,7 +26,7 @@ static inline int ax_poll(uint32_t *canvas, ax_event *ev)
 
 static inline void ax_commit(uint32_t *canvas)
 {
-    volatile int ret;
+    int ret;
     __asm__ volatile("int $0x80"
         : "=a"(ret)
         : "a"(AX_SYS_COMMIT), "D"((long)(uintptr_t)canvas)
@@ -46,7 +36,7 @@ static inline void ax_commit(uint32_t *canvas)
 
 static inline void ax_time(ax_time_t *t)
 {
-    volatile int ret;
+    int ret;
     __asm__ volatile("int $0x80"
         : "=a"(ret)
         : "a"(AX_SYS_TIME), "D"((long)t)
@@ -56,7 +46,7 @@ static inline void ax_time(ax_time_t *t)
 
 static inline void ax_screen(ax_screen_t *s)
 {
-    volatile int ret;
+    int ret;
     __asm__ volatile("int $0x80"
         : "=a"(ret)
         : "a"(AX_SYS_SCREEN), "D"((long)s)
@@ -67,8 +57,8 @@ static inline void ax_screen(ax_screen_t *s)
 #define AX_ARGB(a,r,g,b) (((uint32_t)(a)<<24)|((uint32_t)(r)<<16)|((uint32_t)(g)<<8)|(uint32_t)(b))
 #define AX_RGB(r,g,b)    AX_ARGB(0xFF,r,g,b)
 
-int g_cw, g_ch;
-uint32_t *g_canvas;
+static int g_cw, g_ch;
+static uint32_t *g_canvas;
 
 static inline void ax_canvas_dims(int w, int h) { g_cw = w; g_ch = h; }
 

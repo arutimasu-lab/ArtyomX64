@@ -1,4 +1,5 @@
 #include "../lib/common.h"
+
 int write(int fd, void *buf, unsigned long count);
 
 
@@ -30,7 +31,7 @@ void memset(u8int *dest, u8int val, u32int len)
     for ( ; len != 0; len--) *temp++ = val;
 }
 
-void *memmove(void *dest, const void *src, u32int n) {
+/*void *memmove(void *dest, const void *src, u32int n) {
     unsigned char *d = (unsigned char *)dest;
     const unsigned char *s = (const unsigned char *)src;
 
@@ -53,7 +54,7 @@ void *memmove(void *dest, const void *src, u32int n) {
     }
 
     return dest;
-}
+}*/
 
 // Compare two strings. Should return -1 if 
 // str1 < str2, 0 if they are equal or 1 otherwise.
@@ -199,227 +200,4 @@ int atoi(char *p) {
         p++;
      }
      return k;
-}
-
-
-
-// Добавь в common.c или в отдельный printf.c
-
-#include "../lib/common.h"
-#include <stdarg.h>  // если есть, иначе реализуем вручную
-
-// Если stdarg.h нет — вот минимальная реализация для x86_64
-#ifndef _STDARG_H
-#define _STDARG_H
-typedef __builtin_va_list va_list;
-#define va_start(v,l) __builtin_va_start(v,l)
-#define va_end(v)     __builtin_va_end(v)
-#define va_arg(v,l)   __builtin_va_arg(v,l)
-#endif
-
-// Вспомогательные функции
-static void print_char(char c) {
-    write(1, &c, 1);
-}
-
-static void print_string(const char *s) {
-    if (!s) {
-        write(1, "(null)", 6);
-        return;
-    }
-    while (*s) {
-        print_char(*s++);
-    }
-}
-
-// Печать целого числа (знакового)
-static void print_int(int num, int base) {
-    char buf[32];
-    int i = 0;
-    int negative = 0;
-    
-    if (num == 0) {
-        print_char('0');
-        return;
-    }
-    
-    if (num < 0 && base == 10) {
-        negative = 1;
-        num = -num;
-    }
-    
-    while (num > 0) {
-        int digit = num % base;
-        buf[i++] = (digit < 10) ? '0' + digit : 'a' + digit - 10;
-        num /= base;
-    }
-    
-    if (negative) {
-        print_char('-');
-    }
-    
-    while (i > 0) {
-        print_char(buf[--i]);
-    }
-}
-
-// Печать беззнакового целого
-static void print_uint(unsigned int num, int base) {
-    char buf[32];
-    int i = 0;
-    
-    if (num == 0) {
-        print_char('0');
-        return;
-    }
-    
-    while (num > 0) {
-        int digit = num % base;
-        buf[i++] = (digit < 10) ? '0' + digit : 'a' + digit - 10;
-        num /= base;
-    }
-    
-    while (i > 0) {
-        print_char(buf[--i]);
-    }
-}
-
-// Печать 64-битного беззнакового (для указателей)
-static void print_uint64(uint64_t num, int base) {
-    char buf[32];
-    int i = 0;
-    
-    if (num == 0) {
-        print_char('0');
-        return;
-    }
-    
-    while (num > 0) {
-        int digit = num % base;
-        buf[i++] = (digit < 10) ? '0' + digit : 'a' + digit - 10;
-        num /= base;
-    }
-    
-    while (i > 0) {
-        print_char(buf[--i]);
-    }
-}
-
-// Главная функция форматирования
-static void vprintf(const char *fmt, va_list args) {
-    for (const char *p = fmt; *p; p++) {
-        if (*p != '%') {
-            print_char(*p);
-            continue;
-        }
-        
-        p++; // пропускаем '%'
-        
-        switch (*p) {
-            case '%':
-                print_char('%');
-                break;
-                
-            case 'd':  // десятичное знаковое
-            case 'i':
-                print_int(va_arg(args, int), 10);
-                break;
-                
-            case 'u':  // десятичное беззнаковое
-                print_uint(va_arg(args, unsigned int), 10);
-                break;
-                
-            case 'x':  // шестнадцатеричное (строчные)
-                print_uint(va_arg(args, unsigned int), 16);
-                break;
-                
-            case 'X':  // шестнадцатеричное (заглавные)
-                print_uint(va_arg(args, unsigned int), 16); // можно допилить регистр
-                break;
-                
-            case 'o':  // восьмеричное
-                print_uint(va_arg(args, unsigned int), 8);
-                break;
-                
-            case 's':  // строка
-                print_string(va_arg(args, const char *));
-                break;
-                
-            case 'c':  // символ
-                print_char((char)va_arg(args, int));
-                break;
-                
-            case 'p':  // указатель
-                void *ptr = va_arg(args, void *);
-                if (ptr == NULL) {
-                    print_string("(nil)");
-                } else {
-                    print_string("0x");
-                    print_uint64((uint64_t)ptr, 16);
-                }
-                break;
-                
-            case 'l':  // long (для 32-бит = 32 бита, для 64-бит = 64 бита)
-                p++; // смотрим следующий символ
-                if (*p == 'd' || *p == 'i') {
-                    print_int(va_arg(args, long), 10);
-                } else if (*p == 'u') {
-                    print_uint(va_arg(args, unsigned long), 10);
-                } else if (*p == 'x') {
-                    print_uint(va_arg(args, unsigned long), 16);
-                } else if (*p == 'l') { // ll
-                    p++;
-                    if (*p == 'd' || *p == 'i') {
-                        print_int(va_arg(args, long long), 10);
-                    } else if (*p == 'u') {
-                        print_uint(va_arg(args, unsigned long long), 10);
-                    } else if (*p == 'x') {
-                        print_uint(va_arg(args, unsigned long long), 16);
-                    }
-                }
-                break;
-                
-            case 'z':  // size_t
-                p++;
-                if (*p == 'u') {
-                    print_uint(va_arg(args, size_t), 10);
-                } else if (*p == 'x') {
-                    print_uint(va_arg(args, size_t), 16);
-                }
-                break;
-                
-            default:
-                // неизвестный спецификатор — печатаем как есть
-                print_char('%');
-                print_char(*p);
-                break;
-        }
-    }
-}
-
-// Публичный API
-int printf(const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    vprintf(fmt, args);
-    va_end(args);
-    return 0; // можно вернуть количество напечатанных символов
-}
-
-// sprintf — форматирование в строку
-int sprintf(char *buf, const char *fmt, ...) {
-    // Простая реализация: перенаправляем write во временный буфер
-    // Для этого нужно модифицировать vprintf, но пока так:
-    va_list args;
-    va_start(args, fmt);
-    
-    char temp[4096]; // временный буфер
-    // Сохраняем старый обработчик write и подменяем
-    // Но это сложно, лучше сделать отдельную функцию vsprintf
-    
-    va_end(args);
-    
-    // Заглушка — TODO: сделать нормальную реализацию
-    buf[0] = '\0';
-    return 0;
 }

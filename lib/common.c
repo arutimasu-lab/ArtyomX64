@@ -65,3 +65,16 @@ extern void panic_assert(const char *file, u32int line, const char *desc)
     monitor_write("\n");
     for(;;);
 }
+
+void *memmove(void *dst, const void *src, unsigned long n)
+{
+    unsigned char *d = (unsigned char*)dst;
+    const unsigned char *s = (const unsigned char*)src;
+    if (d == s || n == 0) return dst;
+    if (d < s) {
+        for (unsigned long i = 0; i < n; i++) d[i] = s[i];
+    } else {
+        for (unsigned long i = n; i > 0; i--) d[i - 1] = s[i - 1];
+    }
+    return dst;
+}

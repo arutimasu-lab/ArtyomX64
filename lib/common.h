@@ -23,6 +23,7 @@ void outw(u16int port, u16int value);
 
 void memcpy(u8int *dest, const u8int *src, u32int len);
 void memset(u8int *dest, u8int val, u32int len);
+void *memmove(void *dst, const void *src, unsigned long n);
 int strcmp(char *str1, char *str2);
 char *strcpy(char *dest, const char *src);
 char* strncpy(char *dest, const char *src, size_t n);

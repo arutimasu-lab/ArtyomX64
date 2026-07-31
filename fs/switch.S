@@ -1,89 +1,51 @@
 .section .text
 .global switchTask
-
-# void switchTask(Registers *old, Registers *new)
+.type switchTask, @function
 switchTask:
-    testq %rsi, %rsi
-    jz 9f                       # new == NULL: переключаться некуда
+    movq %rbx, 0(%rdi)
+    movq %r12, 72(%rdi)
+    movq %r13, 80(%rdi)
+    movq %r14, 88(%rdi)
+    movq %r15, 96(%rdi)
+    movq %rbp, 104(%rdi)
 
-    testq %rdi, %rdi
-    jz 1f                       # old == NULL: нечего сохранять, сразу восстанавливаем new
+    pushfq
+    popq 120(%rdi)
 
-    # ---- Сохраняем контекст текущей задачи в *old (%rdi) ----
-    movq %r15, 0(%rdi)
-    movq %r14, 8(%rdi)
-    movq %r13, 16(%rdi)
-    movq %r12, 24(%rdi)
-    movq %r11, 32(%rdi)
-    movq %r10, 40(%rdi)
-    movq %r9,  48(%rdi)
-    movq %r8,  56(%rdi)
-    movq %rdi, 64(%rdi)
-    movq %rsi, 72(%rdi)
-    movq %rbp, 80(%rdi)
-    movq %rdx, 88(%rdi)
-    movq %rcx, 96(%rdi)
-    movq %rbx, 104(%rdi)
+    movq %cr3, %rax
     movq %rax, 112(%rdi)
 
-    # EFLAGS
-    pushfq
-    popq %rax
-    movq %rax, 136(%rdi)
-
-    # RIP (адрес возврата) -- лежит на верхушке стека вызывающего switchTask
     movq (%rsp), %rax
-    movq %rax, 120(%rdi)
-
-    # RSP (учитываем, что мы сохранили rip)
+    movq %rax, 136(%rdi)
     leaq 8(%rsp), %rax
     movq %rax, 128(%rdi)
 
-1:
-    # ---- Восстанавливаем контекст новой задачи из *new (%rsi) ----
-    # ВАЖНО: %rsi используется как база для ВСЕХ чтений ниже и не
-    # перезаписывается до самого конца -- иначе следующая же операция
-    # через [rsi+xx] читает по неверному (испорченному) адресу.
-
-    movq 144(%rsi), %rax
-    testq %rax, %rax
-    jz 2f
-    movq %rax, %cr3
-2:
-    # RSP -- переключаемся на стек новой задачи
+    movq 136(%rsi), %rax
     movq 128(%rsi), %rsp
 
-    # EFLAGS
-    movq 136(%rsi), %rax
-    pushq %rax
+    movq 112(%rsi), %rdx
+    testq %rdx, %rdx
+    jz 1f
+    movq %rdx, %cr3
+1:
+    pushq 120(%rsi)
     popfq
 
-    movq 0(%rsi), %r15
-    movq 8(%rsi), %r14
-    movq 16(%rsi), %r13
-    movq 24(%rsi), %r12
-    movq 32(%rsi), %r11
-    movq 40(%rsi), %r10
-    movq 48(%rsi), %r9
-    movq 56(%rsi), %r8
-    movq 64(%rsi), %rdi
-    movq 80(%rsi), %rbp
-    movq 88(%rsi), %rdx
-    movq 96(%rsi), %rcx
-    movq 104(%rsi), %rbx
-    movq 112(%rsi), %rax
+    movq 0(%rsi), %rbx
+    movq 72(%rsi), %r12
+    movq 80(%rsi), %r13
+    movq 88(%rsi), %r14
+    movq 96(%rsi), %r15
+    movq 104(%rsi), %rbp
 
-    # Кладём точку входа новой задачи на ЕЁ СОБСТВЕННЫЙ (уже
-    # переключённый) стек напрямую из памяти -- ни один регистр
-    # общего назначения при этом не трогается.
-    pushq 120(%rsi)
+    jmp *%rax
+.size switchTask, .-switchTask
 
-    # И только теперь, когда %rsi как база больше не нужен,
-    # восстанавливаем его собственное значение.
-    movq 72(%rsi), %rsi
-
-    # "Прыжок" на RIP новой задачи через ret -- заберёт то, что
-    # мы только что положили инструкцией pushq выше.
-    ret
-9:
-    ret
+.global task_user_entry
+.type task_user_entry, @function
+task_user_entry:
+    movw $0x23, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    iretq
+.size task_user_entry, .-task_user_entry

@@ -20,15 +20,11 @@ typedef struct block_header
 
 #define MIN_SPLIT_SIZE (sizeof(block_header_t) + ALIGN)
 
-/* Глобальные */
 static block_header_t *heap_head = NULL;
 static block_header_t *heap_tail = NULL;
-static void *managed_heap_end = NULL;
-static unsigned char *brk_ptr = NULL; /* текущий предел (bump pointer внутри области) */
-
-/* Символы из link.ld */
-extern char _heap_start;
-extern char _heap_end;
+static unsigned char *managed_heap_start = NULL;
+static unsigned char *managed_heap_end = NULL;
+static int heap_initialized = 0;
 
 /* Внешние функции (реализованы в других файлах вашего ядра) */
 extern void *memcpy(void *dst, const void *src, size_t n);
@@ -50,48 +46,38 @@ static inline block_header_t *payload_to_header(void *p)
     return (block_header_t *)((char *)p - sizeof(block_header_t));
 }
 
-/* Инициализация: передайте _heap_start и размер (в байтах) */
 void malloc_init(void *heap_start, size_t heap_size)
 {
-    if (!heap_start || heap_size < sizeof(block_header_t))
+    uintptr_t raw_start;
+    uintptr_t aligned_start;
+    size_t adjustment;
+
+    heap_head = NULL;
+    heap_tail = NULL;
+    managed_heap_start = NULL;
+    managed_heap_end = NULL;
+    heap_initialized = 0;
+
+    if (!heap_start || heap_size < sizeof(block_header_t) + ALIGN)
         return;
 
-    char *aligned_start = (char *)heap_start;
-    size_t misalign = (uintptr_t)aligned_start & (ALIGN - 1);
-    if (misalign)
-        aligned_start += ALIGN - misalign;
-    heap_size -= (aligned_start - (char *)heap_start);
-
-    if (heap_size < sizeof(block_header_t))
+    raw_start = (uintptr_t)heap_start;
+    aligned_start = (raw_start + (ALIGN - 1u)) & ~(uintptr_t)(ALIGN - 1u);
+    adjustment = (size_t)(aligned_start - raw_start);
+    if (adjustment > heap_size || heap_size - adjustment < sizeof(block_header_t) + ALIGN)
         return;
 
+    heap_size -= adjustment;
     heap_head = (block_header_t *)aligned_start;
     heap_head->magic = MAGIC;
     heap_head->size = heap_size - sizeof(block_header_t);
     heap_head->free = 1;
-    heap_head->prev = heap_head->next = NULL;
-
+    heap_head->prev = NULL;
+    heap_head->next = NULL;
     heap_tail = heap_head;
-    managed_heap_end = (char *)heap_start + heap_size;
-    brk_ptr = (unsigned char *)heap_start + heap_size;
-}
-
-/* Вспомогательная: выделить память у движка morecore (bump) — без привязки к page allocator.
-   Возвращает pointer на область размера >= bytes (включая заголовок), или NULL при исчерпании.
-   Мы выделяем сверху вниз: brk_ptr двигается вниз при выделении. */
-static void *simple_morecore(size_t bytes)
-{
-    size_t req = align_up(bytes);
-    if (req == 0 || req > (size_t)(brk_ptr - (unsigned char*)&_heap_start))
-        return NULL;
-
-    unsigned char *new_brk = (unsigned char *)brk_ptr - req;
-    if ((void *)new_brk < (void *)&_heap_start)
-        return NULL;
-
-    void *result = (void *)new_brk;
-    brk_ptr = new_brk;
-    return result;
+    managed_heap_start = (unsigned char *)aligned_start;
+    managed_heap_end = managed_heap_start + heap_size;
+    heap_initialized = 1;
 }
 
 /* find first-fit */
@@ -130,75 +116,73 @@ static void split_block(block_header_t *h, size_t req_size)
         heap_tail = newh;
 }
 
-/* coalesce */
-static void coalesce(block_header_t *h)
+static block_header_t *coalesce(block_header_t *h)
 {
+    block_header_t *next;
+
     if (!h)
-        return;
+        return NULL;
 
-    if (h->prev && h->prev->free)
-    {
-        block_header_t *p = h->prev;
-        p->size = p->size + sizeof(block_header_t) + h->size;
-        p->next = h->next;
+    if (h->prev && h->prev->free) {
+        h = h->prev;
+        next = h->next;
+        h->size += sizeof(block_header_t) + next->size;
+        h->next = next->next;
         if (h->next)
-            h->next->prev = p;
-        if (heap_tail == h)
-            heap_tail = p;
-        return;
-    }
-
-    if (h->next && h->next->free)
-    {
-        block_header_t *n = h->next;
-        h->size = h->size + sizeof(block_header_t) + n->size;
-        h->next = n->next;
-        if (n->next)
-            n->next->prev = h;
-        if (heap_tail == n)
+            h->next->prev = h;
+        else
             heap_tail = h;
     }
+
+    while (h->next && h->next->free) {
+        next = h->next;
+        h->size += sizeof(block_header_t) + next->size;
+        h->next = next->next;
+        if (h->next)
+            h->next->prev = h;
+        else
+            heap_tail = h;
+    }
+
+    return h;
 }
 
-/* попытка расширить heap: создаём новый блок в свободной области сверху (через simple_morecore)
-   запрашивая минимум bytes + sizeof(block_header_t) */
-static int heap_expand(size_t bytes)
+static int heap_contains_payload(const void *ptr, block_header_t **out_header)
 {
-    size_t need = align_up(bytes + sizeof(block_header_t));
-    void *p = simple_morecore(need);
-    if (!p)
+    block_header_t *cur;
+
+    if (!heap_initialized || !ptr || !managed_heap_start || !managed_heap_end)
+        return 0;
+    if ((const unsigned char *)ptr < managed_heap_start + sizeof(block_header_t) ||
+        (const unsigned char *)ptr >= managed_heap_end)
         return 0;
 
-    block_header_t *h = (block_header_t *)p;
-    h->magic = MAGIC;
-    h->free = 1;
-    h->size = need - sizeof(block_header_t);
-    h->prev = heap_tail;
-    h->next = NULL;
-    if (heap_tail)
-        heap_tail->next = h;
-    heap_tail = h;
-    if (!heap_head)
-        heap_head = h;
-    return 1;
+    cur = heap_head;
+    while (cur) {
+        if (cur->magic != MAGIC)
+            return 0;
+        if (header_to_payload(cur) == ptr) {
+            if (out_header)
+                *out_header = cur;
+            return 1;
+        }
+        cur = cur->next;
+    }
+
+    return 0;
 }
 
-/* malloc */
 void *malloc(size_t size)
 {
-    if (size == 0)
+    block_header_t *fit;
+
+    if (!heap_initialized || size == 0)
         return NULL;
     size = align_up(size);
+    if (size == SIZE_MAX)
+        return NULL;
 
-    block_header_t *fit = find_fit(size);
-    while (!fit)
-    {
-        if (!heap_expand(size))
-            break;
-        fit = find_fit(size);
-        if (!fit)
-            break;
-    }
+    fit = find_fit(size);
     if (!fit)
         return NULL;
     split_block(fit, size);
@@ -206,82 +190,72 @@ void *malloc(size_t size)
     return header_to_payload(fit);
 }
 
-/* free */
 void free(void *ptr)
 {
-    if (!ptr)
-        return;
-    if ((void *)ptr < (void *)&_heap_start || (void *)ptr >= managed_heap_end)
-        return;
+    block_header_t *h;
 
-    block_header_t *h = payload_to_header(ptr);
-    if (h->magic != MAGIC)
-        return;
-
-    if (h->free)
+    if (!heap_contains_payload(ptr, &h) || h->free)
         return;
 
     h->free = 1;
     coalesce(h);
 }
 
-/* realloc */
 void *realloc(void *ptr, size_t new_size)
 {
+    block_header_t *h;
+    void *newp;
+    size_t copy;
+
     if (!ptr)
         return malloc(new_size);
-    if (new_size == 0)
-    {
+    if (new_size == 0) {
         free(ptr);
         return NULL;
     }
-
-    if ((void *)ptr < (void *)&_heap_start || (void *)ptr >= managed_heap_end)
-        return NULL;
-
-    block_header_t *h = payload_to_header(ptr);
-    if (h->magic != MAGIC)
+    if (!heap_contains_payload(ptr, &h) || h->free)
         return NULL;
 
     new_size = align_up(new_size);
-    if (new_size <= h->size)
-    {
+    if (new_size == SIZE_MAX)
+        return NULL;
+    if (new_size <= h->size) {
+        size_t old_size = h->size;
         split_block(h, new_size);
+        if (h->size != old_size && h->next)
+            coalesce(h->next);
         return ptr;
     }
 
-    if (h->next && h->next->free)
-    {
-        size_t sum = h->size;
+    if (h->next && h->next->free) {
+        size_t available = h->size;
         block_header_t *cur = h->next;
         block_header_t *last_free = h;
 
-        while (cur && cur->free && sum < new_size)
-        {
-            sum += sizeof(block_header_t) + cur->size;
+        while (cur && cur->free && available < new_size) {
+            available += sizeof(block_header_t) + cur->size;
             last_free = cur;
             cur = cur->next;
         }
 
-        if (sum >= new_size)
-        {
-            h->size = sum;
+        if (available >= new_size) {
+            h->size = available;
             h->next = cur;
             if (cur)
                 cur->prev = h;
-            if (heap_tail == last_free)
+            else
                 heap_tail = h;
-
             split_block(h, new_size);
-            h->free = 0;
+            if (h->next)
+                coalesce(h->next);
             return ptr;
         }
     }
 
-    void *newp = malloc(new_size);
+    newp = malloc(new_size);
     if (!newp)
         return NULL;
-    size_t copy = (h->size < new_size) ? h->size : new_size;
+    copy = h->size < new_size ? h->size : new_size;
     memcpy(newp, ptr, copy);
     free(ptr);
     return newp;
@@ -304,11 +278,15 @@ void get_kmalloc_stats(kmalloc_stats_t *st)
     block_header_t *cur = heap_head;
     while (cur)
     {
+        size_t block_size;
+        if (cur->magic != MAGIC)
+            break;
         st->num_blocks++;
-        if (st->total_managed > SIZE_MAX - (sizeof(block_header_t) + cur->size))
+        block_size = sizeof(block_header_t) + cur->size;
+        if (st->total_managed > SIZE_MAX - block_size)
             st->total_managed = SIZE_MAX;
         else
-            st->total_managed += sizeof(block_header_t) + cur->size;
+            st->total_managed += block_size;
         if (cur->free)
         {
             st->num_free++;
@@ -323,39 +301,4 @@ void get_kmalloc_stats(kmalloc_stats_t *st)
         }
         cur = cur->next;
     }
-}
-
-static size_t kstrlen(const char *s)
-{
-    size_t i = 0;
-    if (!s)
-        return 0;
-    while (s[i])
-        ++i;
-    return i;
-}
-
-/* Перевод unsigned -> строка десятичная (buf размером >= 32) */
-static char *u32_to_dec(uint32_t v, char *buf, size_t buf_size)
-{
-    if (buf_size < 12)
-        return NULL;
-
-    char tmp[32];
-    int i = 0;
-    if (v == 0)
-    {
-        buf[0] = '0';
-        buf[1] = '\0';
-        return buf;
-    }
-    while (v)
-    {
-        tmp[i++] = '0' + (v % 10);
-        v /= 10;
-    }
-    for (int j = 0; j < i; ++j)
-        buf[j] = tmp[i - 1 - j];
-    buf[i] = '\0';
-    return buf;
 }

@@ -74,7 +74,6 @@ typedef struct
 #define SHT_SYMTAB	  2
 #define SHT_DYNSYM	  11
 #define SHT_REL		  9
-#define SHT_RELA         4    /* ← Добавить эту строку */
 typedef struct
 {
   Elf32_Word	sh_name;

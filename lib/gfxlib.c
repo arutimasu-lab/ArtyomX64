@@ -1,25 +1,21 @@
 #include "gfxlib.h"
 #include "../drivers/framebuffer.h"
-//#include "../drivers/gpu/ixg_driver.h"
+#include "../drivers/gpu/ixg_driver.h"
 #include "font8x8_basic.h"
- #include "../mm/kheap.h"
-#include "../mm/pmm.h"
-#define malloc kmalloc
-#define free kfree
- 
+
 extern uint8_t vgafnt[4096];
- 
+
 static uint8_t  *fb;
 static uint32_t  fb_w, fb_h, fb_pitch;
- 
+
 static uint32_t *backbuffer;
 static uint32_t *blurtmp;
 #define LOG_W fb_w
- 
+
 int gfx_scale = 1;
 static bool gfx_gpu_active = false;
-static bool gfx_gpu_tried  = true;//false;
- 
+static bool gfx_gpu_tried  = false;
+
 static const int sin_table[91] = {
        0,  17,  35,  52,  70,  87, 105, 122, 139, 156,
      174, 191, 208, 225, 242, 259, 276, 292, 309, 326,
@@ -32,7 +28,7 @@ static const int sin_table[91] = {
      985, 988, 990, 993, 995, 996, 998, 999, 999, 1000,
     1000
 };
- 
+
 int gfx_sin_deg(int deg)
 {
     deg %= 360;
@@ -42,10 +38,10 @@ int gfx_sin_deg(int deg)
     if (deg <= 270) return -sin_table[deg - 180];
     return -sin_table[360 - deg];
 }
- 
+
 int gfx_cos_deg(int deg) { return gfx_sin_deg(deg + 90); }
- 
-/*static void gfx_try_gpu_init(void)
+
+static void gfx_try_gpu_init(void)
 {
     if (gfx_gpu_tried) return;
     gfx_gpu_tried = true;
@@ -53,21 +49,21 @@ int gfx_cos_deg(int deg) { return gfx_sin_deg(deg + 90); }
     if (ixg_driver_is_accel_ready()) {
         gfx_gpu_active = true;
     }
-}*/
- 
+}
+
 void gfx_gpu_fallback(void) { gfx_gpu_active = false; }
-bool gfx_gpu_available(void) { return false;/*gfx_gpu_active;*/ }
- 
+bool gfx_gpu_available(void) { return gfx_gpu_active; }
+
 void gfx_init(void)
 {
     fb       = (uint8_t*)(uintptr_t)framebuffer_addr;
     fb_w     = framebuffer_width;
     fb_h     = framebuffer_height;
     fb_pitch = framebuffer_pitch;
- 
+
     if (fb_w > 1920) fb_w = 1920;
     if (fb_h > 1200) fb_h = 1200;
- 
+
     backbuffer = (uint32_t*)malloc(fb_w * fb_h * sizeof(uint32_t));
     blurtmp    = (uint32_t*)malloc(fb_w * fb_h * sizeof(uint32_t));
     if (!backbuffer || !blurtmp) {
@@ -82,59 +78,53 @@ void gfx_init(void)
         backbuffer = (uint32_t*)malloc(fb_w * fb_h * sizeof(uint32_t));
         blurtmp    = (uint32_t*)malloc(fb_w * fb_h * sizeof(uint32_t));
     }
- 
-    //gfx_try_gpu_init();
+
+    gfx_try_gpu_init();
 }
- 
+
 uint32_t gfx_width(void)  { return fb_w; }
 uint32_t gfx_height(void) { return fb_h; }
 uint32_t gfx_fb_width(void)  { return fb_w; }
 uint32_t gfx_fb_height(void) { return fb_h; }
 uint32_t *gfx_backbuffer(void) { return backbuffer; }
- 
+
 void gfx_present(void)
 {
-    if (!backbuffer || !fb) return;
- 
-    static int debug_count = 0;
-    debug_count++;
-    if (debug_count % 100 == 0) {
-        //serial_puts_ax("GFX_PRESENT\n");
-    }
- 
     for (uint32_t y = 0; y < fb_h; y++) {
         uint32_t *dst = (uint32_t*)(fb + y * fb_pitch);
         uint32_t *src = &backbuffer[y * fb_w];
-        for (uint32_t x = 0; x < fb_w; x++) {
+        for (uint32_t x = 0; x < fb_w; x++)
             dst[x] = src[x];
-        }
+    }
+    if (gfx_gpu_active) {
+        ixg_driver_flush();
     }
 }
- 
+
 void gfx_pixel(int x, int y, uint32_t color)
 {
     if (x < 0 || y < 0 || x >= fb_w || y >= fb_h) return;
     backbuffer[y * fb_w + x] = color;
 }
- 
+
 uint32_t gfx_get_pixel(int x, int y)
 {
     if (x < 0 || y < 0 || x >= fb_w || y >= fb_h) return 0;
     return backbuffer[y * fb_w + x];
 }
- 
+
 void gfx_clear_rgb(uint32_t color)
 {
     uint32_t n = fb_w * fb_h;
     for (uint32_t i = 0; i < n; i++) backbuffer[i] = color;
 }
- 
+
 uint32_t gfx_blend(uint32_t dst, uint32_t src)
 {
     uint32_t a = (src >> 24) & 0xFF;
     if (a == 0)   return dst;
     if (a == 255) return src | 0xFF000000;
- 
+
     uint32_t ia = 255 - a;
     uint32_t sr = (src >> 16) & 0xFF;
     uint32_t sg = (src >> 8)  & 0xFF;
@@ -147,7 +137,7 @@ uint32_t gfx_blend(uint32_t dst, uint32_t src)
     uint32_t rb = (sb * a + db * ia) / 255;
     return 0xFF000000 | (rr << 16) | (rg << 8) | rb;
 }
- 
+
 uint32_t gfx_lerp_color(uint32_t a, uint32_t b, int t)
 {
     if (t < 0) t = 0;
@@ -160,7 +150,7 @@ uint32_t gfx_lerp_color(uint32_t a, uint32_t b, int t)
     uint32_t rb = (ab * it + bb * t) >> 8;
     return 0xFF000000 | (rr << 16) | (rg << 8) | rb;
 }
- 
+
 void gfx_fill_rect(int x, int y, int w, int h, uint32_t color)
 {
     if (x < 0) { w += x; x = 0; }
@@ -168,16 +158,16 @@ void gfx_fill_rect(int x, int y, int w, int h, uint32_t color)
     if (x + w > fb_w) w = fb_w - x;
     if (y + h > fb_h) h = fb_h - y;
     if (w <= 0 || h <= 0) return;
- 
-    /*if (gfx_gpu_active && ixg_driver_is_accel_ready()) {
+
+    if (gfx_gpu_active && ixg_driver_is_accel_ready()) {
         ixg_driver_accel_rect(x, y, w, h, color);
-    }*/
+    }
     for (int j = 0; j < h; j++) {
         uint32_t *row = &backbuffer[(y + j) * fb_w + x];
         for (int i = 0; i < w; i++) row[i] = color;
     }
 }
- 
+
 void gfx_fill_rect_alpha(int x, int y, int w, int h, uint32_t argb)
 {
     if (x < 0) { w += x; x = 0; }
@@ -185,17 +175,17 @@ void gfx_fill_rect_alpha(int x, int y, int w, int h, uint32_t argb)
     if (x + w > fb_w) w = fb_w - x;
     if (y + h > fb_h) h = fb_h - y;
     if (w <= 0 || h <= 0) return;
- 
-    /*if (gfx_gpu_active && ixg_driver_is_accel_ready()) {
+
+    if (gfx_gpu_active && ixg_driver_is_accel_ready()) {
         if (ixg_driver_accel_rect_blend(x, y, w, h, argb, 0) == IXG_BIND_OK)
             return;
-    }*/
+    }
     for (int j = 0; j < h; j++) {
         uint32_t *row = &backbuffer[(y + j) * fb_w + x];
         for (int i = 0; i < w; i++) row[i] = gfx_blend(row[i], argb);
     }
 }
- 
+
 static int in_rounded(int px, int py, int w, int h, int r)
 {
     if (px >= r && px < w - r) return 1;
@@ -207,7 +197,7 @@ static int in_rounded(int px, int py, int w, int h, int r)
     int dy = py - cy;
     return (dx * dx + dy * dy) <= (r * r);
 }
- 
+
 void gfx_rounded_rect(int x, int y, int w, int h, int radius, uint32_t color)
 {
     if (radius * 2 > w) radius = w / 2;
@@ -217,7 +207,7 @@ void gfx_rounded_rect(int x, int y, int w, int h, int radius, uint32_t color)
             if (in_rounded(i, j, w, h, radius))
                 gfx_pixel(x + i, y + j, color);
 }
- 
+
 void gfx_rounded_rect_alpha(int x, int y, int w, int h, int radius, uint32_t argb)
 {
     if (radius * 2 > w) radius = w / 2;
@@ -231,17 +221,17 @@ void gfx_rounded_rect_alpha(int x, int y, int w, int h, int radius, uint32_t arg
                 *p = gfx_blend(*p, argb);
             }
 }
- 
+
 void gfx_hline(int x, int y, int w, uint32_t color)
 {
     for (int i = 0; i < w; i++) gfx_pixel(x + i, y, color);
 }
- 
+
 void gfx_vline(int x, int y, int h, uint32_t color)
 {
     for (int j = 0; j < h; j++) gfx_pixel(x, y + j, color);
 }
- 
+
 void gfx_rect_outline(int x, int y, int w, int h, uint32_t color)
 {
     gfx_hline(x, y, w, color);
@@ -249,7 +239,7 @@ void gfx_rect_outline(int x, int y, int w, int h, uint32_t color)
     gfx_vline(x, y, h, color);
     gfx_vline(x + w - 1, y, h, color);
 }
- 
+
 void gfx_rounded_outline(int x, int y, int w, int h, int radius, uint32_t color)
 {
     if (radius * 2 > w) radius = w / 2;
@@ -268,7 +258,7 @@ void gfx_rounded_outline(int x, int y, int w, int h, int radius, uint32_t color)
                 gfx_pixel(x + i, y + j, color);
         }
 }
- 
+
 void gfx_line(int x0, int y0, int x1, int y1, uint32_t color)
 {
     int dx = x1 - x0, dy = y1 - y0;
@@ -285,7 +275,7 @@ void gfx_line(int x0, int y0, int x1, int y1, uint32_t color)
         if (e2 <  ady) { err += adx; y0 += sy; }
     }
 }
- 
+
 void gfx_vgradient(int x, int y, int w, int h, uint32_t top, uint32_t bottom)
 {
     for (int j = 0; j < h; j++) {
@@ -294,7 +284,7 @@ void gfx_vgradient(int x, int y, int w, int h, uint32_t top, uint32_t bottom)
         gfx_hline(x, y + j, w, c);
     }
 }
- 
+
 void gfx_blur_region(int x, int y, int w, int h, int passes)
 {
     if (x < 0) { w += x; x = 0; }
@@ -302,7 +292,7 @@ void gfx_blur_region(int x, int y, int w, int h, int passes)
     if (x + w > fb_w) w = fb_w - x;
     if (y + h > fb_h) h = fb_h - y;
     if (w <= 0 || h <= 0) return;
- 
+
     for (int p = 0; p < passes; p++) {
         for (int j = 0; j < h; j++) {
             for (int i = 0; i < w; i++) {
@@ -325,14 +315,14 @@ void gfx_blur_region(int x, int y, int w, int h, int passes)
             }
     }
 }
- 
+
 void gfx_glass_region(int x, int y, int w, int h, int radius, uint32_t tint_argb, int blur_passes)
 {
     gfx_blur_region(x, y, w, h, blur_passes);
     gfx_rounded_rect_alpha(x, y, w, h, radius, tint_argb);
     gfx_rounded_outline(x, y, w, h, radius, 0x40FFFFFF);
 }
- 
+
 void gfx_glass_highlight(int x, int y, int w, int h, int radius)
 {
     if (radius * 2 > w) radius = w / 2;
@@ -353,7 +343,7 @@ void gfx_glass_highlight(int x, int y, int w, int h, int radius)
         }
     }
 }
- 
+
 void gfx_glass_specular(int x, int y, int w, int h, int radius)
 {
     if (radius * 2 > w) radius = w / 2;
@@ -378,14 +368,14 @@ void gfx_glass_specular(int x, int y, int w, int h, int radius)
         }
     }
 }
- 
+
 void gfx_glass_shadow(int x, int y, int w, int h, int radius, int blur_passes)
 {
     int sh_off = 3;
     gfx_rounded_rect_alpha(x + sh_off, y + sh_off, w, h, radius, 0x30000000);
     gfx_blur_region(x + sh_off, y + sh_off, w, h, blur_passes);
 }
- 
+
 void gfx_liquid_glass(int x, int y, int w, int h, int radius, uint32_t tint_argb, int blur_passes)
 {
     gfx_glass_shadow(x, y, w, h, radius, blur_passes);
@@ -409,7 +399,7 @@ void gfx_liquid_glass(int x, int y, int w, int h, int radius, uint32_t tint_argb
         }
     }
 }
- 
+
 void gfx_draw_char_8x8(char c, int x, int y, uint32_t fg, uint32_t bg, bool bgon)
 {
     const unsigned char *g = font8x8_basic[(uint8_t)c];
@@ -421,12 +411,12 @@ void gfx_draw_char_8x8(char c, int x, int y, uint32_t fg, uint32_t bg, bool bgon
         }
     }
 }
- 
+
 void gfx_draw_string_8x8(const char *s, int x, int y, uint32_t fg, uint32_t bg, bool bgon)
 {
     while (*s) { gfx_draw_char_8x8(*s++, x, y, fg, bg, bgon); x += 8; }
 }
- 
+
 void gfx_text(const char *s, int x, int y, uint32_t color)
 {
     int ox = x;
@@ -436,7 +426,7 @@ void gfx_text(const char *s, int x, int y, uint32_t color)
         x += 8;
     }
 }
- 
+
 void gfx_text_scaled(const char *s, int x, int y, uint32_t color, int scale)
 {
     int ox = x;
@@ -453,14 +443,14 @@ void gfx_text_scaled(const char *s, int x, int y, uint32_t color, int scale)
         s++;
     }
 }
- 
+
 int gfx_text_width(const char *s)
 {
     int n = 0;
     while (*s++) n++;
     return n * 8;
 }
- 
+
 void gfx_blit_argb(const uint32_t *src, int sw, int sh, int dx, int dy)
 {
     for (int j = 0; j < sh; j++)
@@ -472,7 +462,7 @@ void gfx_blit_argb(const uint32_t *src, int sw, int sh, int dx, int dy)
             *p = gfx_blend(*p, c);
         }
 }
- 
+
 void gfx_blit_argb_scaled(const uint32_t *src, int sw, int sh, int dx, int dy, int dw, int dh)
 {
     if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
@@ -488,15 +478,15 @@ void gfx_blit_argb_scaled(const uint32_t *src, int sw, int sh, int dx, int dy, i
         }
     }
 }
- 
+
 void gfx_clear(uint32_t c)        { gfx_clear_rgb(c); }
 void gfx_putpixel_raw(int x, int y, uint32_t c) { gfx_pixel(x, y, c); }
- 
+
 void gfx_rect(int x, int y, int w, int h, uint32_t c)
 {
     gfx_fill_rect(x, y, w, h, c);
 }
- 
+
 void gfx_circle(int cx, int cy, int r, uint32_t c)
 {
     for (int y = -r; y <= r; y++)
@@ -504,19 +494,19 @@ void gfx_circle(int cx, int cy, int r, uint32_t c)
             if (x*x + y*y <= r*r)
                 gfx_pixel(cx + x, cy + y, c);
 }
- 
+
 void draw_rectangle(int x, int y, int w, int h, uint8_t color)
 {
     (void)color;
     gfx_fill_rect(x, y, w, h, 0xFFAAAAAA);
 }
- 
+
 void draw_circle(int x, int y, int radius, uint8_t color)
 {
     (void)color;
     gfx_circle(x, y, radius, 0xFFAAAAAA);
 }
-/*
+
 void draw_vga_character(uint8_t c, int x, int y, int fg, int bg, bool bgon)
 {
     int mask[8] = { 128, 64, 32, 16, 8, 4, 2, 1 };
@@ -527,12 +517,12 @@ void draw_vga_character(uint8_t c, int x, int y, int fg, int bg, bool bgon)
             else if (bgon)            gfx_pixel(x + cx, y + cy, bg);
         }
 }
- 
+
 void draw_text_string(const char *text, int x, int y, int fg, int bg, bool bgon)
 {
     while (*text) { draw_vga_character(*text++, x, y, fg, bg, bgon); x += 8; }
 }
- 
+
 void draw_vga_character_8x8(uint8_t c, int x, int y, int fg, int bg, bool bgon)
 {
     for (int cy = 0; cy < 8; cy++) {
@@ -543,8 +533,8 @@ void draw_vga_character_8x8(uint8_t c, int x, int y, int fg, int bg, bool bgon)
         }
     }
 }
- 
+
 void draw_text_string_8x8(const char *text, int x, int y, int fg, int bg, bool bgon)
 {
     while (*text) { draw_vga_character_8x8(*text++, x, y, fg, bg, bgon); x += 8; }
-}*/
+}
