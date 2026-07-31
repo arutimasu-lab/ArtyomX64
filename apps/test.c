@@ -1,6 +1,5 @@
 #include "../lib/axipc.h"
 #include "../lib/libax.h"
-#include "../lib/unistd.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -59,11 +58,10 @@ void _start(void)
         anim = (anim + 2) % w;
 
         ax_event ev;
-        while (ax_poll(cb, &ev)>0) {
+        while (ax_poll(cb, &ev)) {
             if (ev.type == AX_EV_KEY && ev.key == 27) return;
             if (ev.type == AX_EV_CLOSE) return;
         }
-        //__asm__ volatile("hlt");
-         yield();
+        __asm__ volatile("hlt");
     }
 }

@@ -1,19 +1,5 @@
 #include "../lib/libax.h"
 #include "../lib/unistd.h"
-typedef unsigned long long  u64int;
-typedef          long long  s64int;
-typedef unsigned int        u32int;
-typedef          int        s32int;
-typedef unsigned short      u16int;
-typedef          short      s16int;
-typedef unsigned char       u8int;
-typedef          char       s8int;
-
-void outb(u16int port, u8int value)
-{
-    __asm__ volatile ("outb %1, %0" : : "dN" (port), "a" (value));
-}
-
 #define CW 360
 #define CH 280
 
@@ -39,7 +25,6 @@ static void render(void)
 
 void _start(void)
 {
-     // <-- буквально первая инструкция функции
     g_canvas = ax_surface("Notes", CW, CH);
     ax_canvas_dims(CW, CH);
     if (!g_canvas) { for(;;); }
@@ -49,7 +34,7 @@ void _start(void)
 
     ax_event ev;
     for (;;) {
-        while (ax_poll(g_canvas, &ev)>0) {
+        while (ax_poll(g_canvas, &ev)) {
             if (ev.type == AX_EV_CLOSE) return;
             if (ev.type == AX_EV_KEY) {
                 if (ev.key == '\b') { if (blen > 0) blen--; }

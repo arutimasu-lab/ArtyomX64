@@ -1,5 +1,5 @@
 #include "../lib/libax.h"
-#include "../lib/unistd.h"
+
 #define CW 480
 #define CH 300
 #define MAX_LINES 28
@@ -43,53 +43,24 @@ static void itoa_simple(int v, char *out)
     out[p] = 0;
 }
 
-// Парсинг аргументов: разбивает cmd на argv, возвращает argc
-static int parse_args(char *cmd, char **argv, int max_args)
-{
-    int argc = 0;
-    char *p = cmd;
-    while (*p == ' ') p++;
-    while (*p && argc < max_args) {
-        argv[argc++] = p;
-        while (*p && *p != ' ') p++;
-        if (*p) { *p = 0; p++; }
-        while (*p == ' ') p++;
-    }
-    return argc;
-}
-
-static void run_cmd(char *cmd)
+static void run_cmd(const char *cmd)
 {
     if (cmd[0] == 0) return;
-    
-    char *argv[8];
-    int argc = parse_args(cmd, argv, 8);
-    if (argc == 0) return;
-    
-    if (streq(argv[0], "help")) {
+    if (streq(cmd, "help")) {
         push_line("cmds: help ver clear time echo");
-    } else if (streq(argv[0], "ver")) {
+    } else if (streq(cmd, "ver")) {
         push_line("ArtyomXOS 1.0 x86_64 AXShell");
-    } else if (streq(argv[0], "clear")) {
+    } else if (streq(cmd, "clear")) {
         sb_count = 0;
-    } else if (streq(argv[0], "time")) {
+    } else if (streq(cmd, "time")) {
         ax_time_t t; ax_time(&t);
         char buf[32];
         buf[0] = '0' + t.hour / 10; buf[1] = '0' + t.hour % 10; buf[2] = ':';
         buf[3] = '0' + t.minute / 10; buf[4] = '0' + t.minute % 10; buf[5] = ':';
         buf[6] = '0' + t.second / 10; buf[7] = '0' + t.second % 10; buf[8] = 0;
         push_line(buf);
-    } else if (streq(argv[0], "echo")) {
-        // Вывод всех аргументов через пробел
-        char buf[LINE_LEN];
-        int p = 0;
-        for (int i = 1; i < argc; i++) {
-            if (i > 1 && p < LINE_LEN - 1) buf[p++] = ' ';
-            for (int j = 0; argv[i][j] && p < LINE_LEN - 1; j++)
-                buf[p++] = argv[i][j];
-        }
-        buf[p] = 0;
-        push_line(buf);
+    } else if (cmd[0] == 'e' && cmd[1] == 'c' && cmd[2] == 'h' && cmd[3] == 'o') {
+        push_line(cmd + 5);
     } else {
         push_line("xsh: command not found");
     }
@@ -123,7 +94,7 @@ void _start(void)
 
     ax_event ev;
     for (;;) {
-        while (ax_poll(g_canvas, &ev)>0) {
+        while (ax_poll(g_canvas, &ev)) {
             if (ev.type == AX_EV_CLOSE) return;
             if (ev.type == AX_EV_KEY) {
                 if (ev.key == '\n') {
@@ -149,6 +120,6 @@ void _start(void)
                 ax_commit(g_canvas);
             }
         }
-        yield();
+        __asm__ volatile("pause");
     }
 }

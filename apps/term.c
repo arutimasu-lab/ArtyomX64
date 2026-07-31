@@ -278,7 +278,7 @@ void _start(void)
     while (t.alive) {
         t_draw();
         ax_event ev;
-        while (ax_poll(cb, &ev)<-1) {
+        while (ax_poll(cb, &ev)) {
             if (ev.type == AX_EV_KEY) {
                 char k = (char)ev.key;
                 if (k == '\n' || k == '\r') {
@@ -296,7 +296,6 @@ void _start(void)
                 t.alive = false;
             }
         }
-        //__asm__ volatile("hlt");
-         yield();
+        __asm__ volatile("hlt");
     }
 }

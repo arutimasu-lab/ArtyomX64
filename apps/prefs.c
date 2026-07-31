@@ -1,5 +1,5 @@
 #include "../lib/libax.h"
-#include "../lib/unistd.h"
+
 #define CW 380
 #define CH 240
 
@@ -27,14 +27,14 @@ static void render(void)
     res[p] = 0;
     ax_text(res, 100, 80, AX_RGB(120,200,255));
 
-    /*ax_text("Time:", 20, 104, AX_RGB(220,220,230));
+    ax_text("Time:", 20, 104, AX_RGB(220,220,230));
     ax_time_t tm; ax_time(&tm);
     char clk[16];
     clk[0]='0'+tm.hour/10; clk[1]='0'+tm.hour%10; clk[2]=':';
     clk[3]='0'+tm.minute/10; clk[4]='0'+tm.minute%10; clk[5]=':';
     clk[6]='0'+tm.second/10; clk[7]='0'+tm.second%10; clk[8]=0;
     ax_text(clk, 100, 104, AX_RGB(120,255,160));
-*/
+
     ax_text("Accent:", 20, 132, AX_RGB(220,220,230));
     uint32_t accents[] = {
         AX_RGB(10,132,255), AX_RGB(255,69,58), AX_RGB(48,209,88),
@@ -51,18 +51,16 @@ void _start(void)
     g_canvas = ax_surface("System Settings", CW, CH);
     ax_canvas_dims(CW, CH);
     if (!g_canvas) { for(;;); }
- render();
-            ax_commit(g_canvas);
+
     ax_event ev;
     int tick = 0;
     for (;;) {
-        while (ax_poll(g_canvas, &ev)>0)
-            if (ev.type == AX_EV_CLOSE) return -1;
+        while (ax_poll(g_canvas, &ev))
+            if (ev.type == AX_EV_CLOSE) return;
         if ((tick++ & 0x3FFFF) == 0) {
             render();
             ax_commit(g_canvas);
         }
-        //__asm__ volatile("pause");
-        yield();
+        __asm__ volatile("pause");
     }
 }
